@@ -1,50 +1,109 @@
-# secretary-template-gpt
+# my-secretary-template-GPT
 
-Claude Code 版秘書テンプレ ([my-secretary-template](https://github.com/magiccat-lab/my-secretary-template)) の
-**脳を GPT (codex CLI) に差し替えた版**。数学者向けに Lean / GeoGebra / TeX の MCP を同梱する。
+GPT (OpenAI codex CLI) を脳にした、常駐型 AI 秘書のテンプレート。
 
-## Claude Code 版との設計差分
+Discord を窓口に、あなた専属の秘書エージェントが 24 時間動き続ける。予定・タスク・
+メモを Notion で管理し、cron で定期処理を回し、必要なら自分で調べて返事をする。
+数学者向けに **Lean (定理証明) / GeoGebra (作図・CAS) / TeX (数式組版)** の MCP を
+標準同梱している。
 
-| 層 | Claude Code 版 | GPT (codex) 版 |
-| --- | --- | --- |
-| 脳 | `claude` を screen 内 TUI 常駐 | `codex exec --json` を job ごとに起動 (TUI 常駐しない) |
-| 受信 | webhook → queue → `screen -X stuff` で TUI 注入 | webhook → queue → **codex_queue_worker** が exec 投入 (流用) |
-| 文脈継続 | TUI セッション | `codex exec resume <session_id>` で毎ターン継続 |
-| 送信 | Discord plugin の reply tool | `discord_send.py` を bash で叩く (plugin 無し) |
-| identity | `CLAUDE.md` + `@AGENT/*` import | `AGENTS.md` + `~/.codex/config.toml` |
-| 承認 | `--dangerously-skip-permissions` | `approval_policy="never"` + `sandbox_mode="workspace-write"` |
-| 固着検知 | screen hardcopy の regex | worker の **heartbeat state file** の鮮度 |
-| MCP | Claude Code MCP 設定 | `~/.codex/config.toml [mcp_servers]` |
+> Claude 版が欲しい人へ: 脳を Claude にした姉妹テンプレ
+> [my-secretary-template](https://github.com/magiccat-lab/my-secretary-template) がある。
+> 本リポジトリはその**脳を GPT (codex) に差し替えた版**で、設計の要所が異なる (下表)。
 
-> なぜ TUI 常駐をやめたか: codex では TUI + `screen -X stuff` 注入は承認モーダル /
-> paste 検出 / TUI 更新で壊れやすく、長時間で context も劣化する。`codex exec` が
-> codex 公式の自動化パス。([codex 自身のレビューに基づく設計判断 2026-06-05])
+## 何ができるか
 
-## 構成
+- **Discord で会話**: メンションやメッセージにあなたの秘書が返事をする
+- **タスク / 予定管理**: Notion DB と同期、リマインド
+- **定期処理**: 朝の挨拶・天気・予定通知などを cron で自動実行
+- **自律作業**: 調べもの・文書作成・ファイル整理を指示すると自分で進める
+- **数学支援**: Lean で証明検証、GeoGebra で作図、TeX で数式入りの文書生成
+
+## アーキテクチャ
 
 ```
-start_server.sh              起動 (screen に worker + webhook)
+Discord / cron
+      │  (HTTP)
+      ▼
+webhook_server.py ──► /tmp/codex_queue.txt (base64 行追記)
+                              │
+                              ▼
+                  codex_queue_worker.py        ← 中核
+                   ├─ 1 行ごとに codex exec --json を起動
+                   ├─ session_id を保存し、次ターンは exec resume で文脈継続
+                   └─ 毎ターン heartbeat を state file に書く
+                              │
+                              ▼
+                     codex (GPT) = 脳
+                   ├─ AGENTS.md の人格で振る舞う
+                   ├─ 返信は discord_send.py を bash で叩く
+                   └─ Lean / GeoGebra / TeX MCP を使う
+                              │
+session_watchdog.py (cron */2) ─ heartbeat の鮮度を見て固着を自動復帰
+```
+
+## Claude 版との設計差分
+
+| 層 | Claude 版 | GPT (codex) 版 |
+| --- | --- | --- |
+| 脳 | `claude` を screen 内 TUI で常駐 | `codex exec --json` を job ごとに起動 (TUI 常駐しない) |
+| 文脈継続 | TUI セッション | `codex exec resume <session_id>` で毎ターン継続 |
+| 受信 | webhook → queue → `screen -X stuff` で TUI 注入 | webhook → queue → worker が exec 投入 |
+| 送信 | Discord plugin の reply tool | `discord_send.py` を bash で直接送信 |
+| 人格 / 設定 | `CLAUDE.md` + `@AGENT/*` import | `AGENTS.md` + `~/.codex/config.toml` |
+| 無人承認 | `--dangerously-skip-permissions` | `approval_policy="never"` + `sandbox_mode="workspace-write"` |
+| 固着検知 | screen hardcopy の正規表現 | worker の heartbeat state file の鮮度 |
+| MCP | Claude Code の MCP 設定 | `~/.codex/config.toml [mcp_servers]` |
+
+### なぜ TUI 常駐をやめたか
+
+codex で TUI を常駐させ `screen -X stuff` でプロンプトを流し込む方式は、承認モーダル・
+paste 検出・TUI 再描画で壊れやすく、長時間運用では会話文脈も劣化する。`codex exec` は
+codex 公式の自動化インターフェースで、stdin・JSONL イベント・固定 sandbox 設定をサポート
+し、`codex exec resume` でセッションを継続できる。本テンプレはこの **job 駆動** を採用する。
+
+## ディレクトリ構成
+
+```
+start_server.sh              起動 (screen に worker + webhook を立てる)
 config.codex.toml.template   ~/.codex/config.toml の雛形 (承認policy + 数学MCP)
 AGENTS.md                    codex が読む唯一の指示書 (人格・返信方法・安全ルール)
-AGENT/IDENTITY.md            人格 (SETUP で記入)
-AGENT/USER.md                ユーザー情報 (SETUP で記入)
+AGENT/
+  IDENTITY.md                秘書の人格 (SETUP で記入)
+  USER.md                    ユーザー情報 (SETUP で記入)
+  JOBS.md                    インフラ・運用メモ
 scripts/
-  codex_queue_worker.py      ★中核: queue → codex exec → resume で文脈継続 + heartbeat
-  webhook_server.py          受信 (Discord/cron → queue)。流用
-  discord_send.py            送信。token 解決を harness 非依存化
-  session_watchdog.py        heartbeat ベースの固着検知。codex 用に書き直し
+  codex_queue_worker.py      中核: queue → codex exec → resume 継続 + heartbeat
+  webhook_server.py          受信 (Discord/cron → queue)
+  discord_send.py            送信 (token 解決は env / .env / ~/.codex の順、~/.claude 非依存)
+  session_watchdog.py        heartbeat ベースの固着検知・自動復帰
+  lib/discord_post.py        送信ヘルパー
+  integrations/notion/       Notion 連携
+data/
+  handoff.md                 直近の引き継ぎ文脈
+  pending_tasks.json         タスク
 ```
 
-## SETUP
+## セットアップ
 
-`SETUP.md` を参照。要点:
-1. `npm i -g @openai/codex` → `codex login` (ChatGPT アカウント / 課金API不要)
-2. `cp config.codex.toml.template ~/.codex/config.toml` → MCP パスを環境に合わせる
-3. `.env` に `DISCORD_BOT_TOKEN` を記入
-4. `AGENT/IDENTITY.md` / `AGENT/USER.md` に人格・ユーザー情報を記入
-5. `bash start_server.sh` で起動、cron に `session_watchdog.py` を登録
+[SETUP.md](SETUP.md) に全手順 (所要 30〜60 分) と smoke test がある。最短の流れ:
 
-## ステータス
+```bash
+npm i -g @openai/codex && codex login        # 1. 脳 (ChatGPT 課金アカウント、API課金不要)
+git clone https://github.com/magiccat-lab/my-secretary-template-GPT ~/secretary-gpt
+cd ~/secretary-gpt && pip install -r requirements.txt
+cp config.codex.toml.template ~/.codex/config.toml   # 2. 承認policy + MCP を編集
+cp .env.template .env                                 # 3. DISCORD_BOT_TOKEN を記入
+# 4. AGENT/IDENTITY.md と AGENT/USER.md に人格・ユーザー情報を記入
+bash start_server.sh                                  # 5. 起動
+```
 
-🚧 雛形段階 (2026-06-05)。codex exec 経路・MCP 同梱・watchdog を実装済。
-本番投入前に実機での疎通テスト (codex exec resume の挙動 / sandbox network / MCP 起動) が必要。
+## 必要なもの
+
+- Linux / WSL、Python 3.10+、Node.js 18+、`screen`、`lsof`
+- ChatGPT 課金アカウント (codex の認証用。OpenAI API キー課金は**不要**)
+- Discord bot トークン
+
+## ライセンス
+
+[LICENSE](LICENSE) を参照。
