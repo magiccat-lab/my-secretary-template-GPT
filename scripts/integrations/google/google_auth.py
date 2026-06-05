@@ -22,6 +22,7 @@ from pathlib import Path
 SCOPES = [
     "https://www.googleapis.com/auth/calendar",
     "https://www.googleapis.com/auth/gmail.modify",
+    "https://www.googleapis.com/auth/gmail.send",
 ]
 
 SECRET_DIR = Path(os.environ.get("GOOGLE_SECRET_DIR", os.path.expanduser("~/.codex/secrets")))
