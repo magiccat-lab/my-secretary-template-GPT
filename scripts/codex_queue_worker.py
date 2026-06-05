@@ -73,14 +73,19 @@ def save_session_id(sid: str) -> None:
 
 
 def build_command(prompt: str, session_id: str | None) -> list[str]:
-    """codex exec コマンドを組む。既存 session があれば resume で継続。"""
-    cmd = [CODEX_BIN, "exec", "--json"]
-    cmd += EXTRA_FLAGS
+    """codex exec コマンドを組む。既存 session があれば resume で継続。
+
+    実機検証 (codex 0.137.0, 2026-06-05) で確定した仕様:
+      - session 識別子は thread.started イベントの `thread_id` (UUID)。
+      - `exec resume` サブコマンドは `-s/--sandbox` を受け付けない (exec 専用)。
+        sandbox/approval は config.toml か `-c key=value` 上書きで渡す。
+      - フラグは positional (SESSION_ID/PROMPT) より前に置く。
+    """
     if session_id:
-        # resume: 直前ターンの会話文脈を引き継ぐ
-        return [CODEX_BIN, "exec", "resume", session_id, "--json", *EXTRA_FLAGS, prompt]
-    cmd.append(prompt)
-    return cmd
+        # resume: 直前ターンの会話文脈を引き継ぐ。flags → SESSION_ID → PROMPT の順。
+        return [CODEX_BIN, "exec", "resume", "--json", "--skip-git-repo-check",
+                *EXTRA_FLAGS, session_id, prompt]
+    return [CODEX_BIN, "exec", "--json", "--skip-git-repo-check", *EXTRA_FLAGS, prompt]
 
 
 def run_turn(prompt: str) -> None:
@@ -93,6 +98,7 @@ def run_turn(prompt: str) -> None:
         proc = subprocess.Popen(
             cmd,
             cwd=str(SECRETARY_HOME),
+            stdin=subprocess.DEVNULL,  # stdin を閉じる (prompt は引数渡し。開いたままだと待機する)
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
@@ -110,17 +116,26 @@ def run_turn(prompt: str) -> None:
         line = line.strip()
         if not line:
             continue
-        # JSONL event をなめて session_id / 完了 / 失敗を拾う
+        # JSONL event をなめて thread_id / 完了 / 失敗を拾う。
+        # codex 0.137.0 の event 形式 (実機確認):
+        #   {"type":"thread.started","thread_id":"<uuid>"}
+        #   {"type":"item.completed","item":{"type":"agent_message","text":"..."}}
+        #   {"type":"turn.completed","usage":{...}}  / 失敗時は turn.failed
         try:
             ev = json.loads(line)
         except json.JSONDecodeError:
             continue
-        sid = ev.get("session_id") or (ev.get("session") or {}).get("id")
+        sid = ev.get("thread_id") or ev.get("session_id") or (ev.get("session") or {}).get("id")
         if sid:
             new_session = sid
+        # エージェントの発話を運用ログに残す (返信自体は codex が discord_send.py で送る)
+        if ev.get("type") == "item.completed":
+            item = ev.get("item") or {}
+            if item.get("type") == "agent_message" and item.get("text"):
+                log(f"  agent: {item['text'][:200]}")
         etype = ev.get("type") or ev.get("event") or ""
-        if "fail" in etype or "error" in etype:
-            last_err = ev.get("message") or etype
+        if "fail" in etype or etype == "error":
+            last_err = ev.get("message") or ev.get("error") or etype
         write_state(status="running", last_event=etype,
                     last_session_id=new_session or session_id)
         if time.monotonic() - start > TURN_TIMEOUT:
