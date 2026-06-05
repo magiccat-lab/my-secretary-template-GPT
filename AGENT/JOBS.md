@@ -12,34 +12,29 @@
 
 ## コアジョブ（テンプレートに同梱）
 
-### タスクリマインダー
-- スクリプト: `scripts/task_remind.py`
-- Cron: `30 6,22 * * *`（1日2回 — 好みで調整）
-- `data/pending_tasks.json` をスキャンして未完了分を `DISCORD_CHANNEL_RANDOM` に投稿。
-
-### 死活監視
-- スクリプト: `scripts/health_check.sh`
-- Cron: `*/5 * * * *`
-- webhook / screen / claude のどれかが落ちていたら再起動。
-
-### デイリー handoff
-- スクリプト: `scripts/daily_handoff.py`
-- Cron: `0 3 * * *`（または停止前に手動実行）
-- `data/handoff.md` を書いて、次のセッションが引き継げるようにする。
-
-### 定期コールドリスタート（推奨）
-- スクリプト: `scripts/restart.sh`
-- Cron: `0 3 * * *`（毎日 03:00 の nightly を推奨。週1なら `10 3 * * 0`）
-- handoff を残してから screen セッションをコールドスタートし直す。会話コンテキストの
-  肥大で重く/不安定になるのを防ぐ。24/7 稼働ならほぼ必須。
-
-### セッションハング watchdog（推奨）
+### 死活・固着 watchdog（必須）
 - スクリプト: `scripts/session_watchdog.py`
 - Cron: `*/2 * * * *`（2 分おき）
-- screen バッファを覗いて「固まった」状態（使用量上限/選択肢プロンプト/MCP 認証待ち/
-  キュー詰まり）を検出し、`screen -X stuff` で適切なキーを送って自動復帰。`health_check.sh`
-  が拾う「落ちた」と相補。`WATCHDOG_DRY_RUN=1` で送信せず検出のみ。
-- 24h で 8 回超 fire したらループとみなし停止 + 通知（手動確認を促す）。
+- 脳(worker)が書く heartbeat（`data/codex_worker_state.json`）の鮮度を見て、
+  落ちた / 固まった（`status=running` のまま長時間 / 未処理 backlog があるのに無更新）
+  を検出し `start_server.sh` で自動再起動。`WATCHDOG_NOTIFY_CHANNEL` に通知先 ch_id。
+- Claude 版のような screen hardcopy 監視ではなく heartbeat ベース（TUI 非依存で堅い）。
+
+### 定期セッションリセット（推奨）
+- Cron: `0 4 * * *`（毎日 04:00。週1なら `10 4 * * 0`）
+- `/tmp/codex_secretary_session.txt` を消して `start_server.sh` で fresh 起動。
+  `codex exec resume` の文脈肥大を防ぐ。codex は job 駆動なので Claude 版ほど常駐
+  コンテキストは溜まらず、無くても可。
+
+### Discord ログ → Notion Log Library
+- スクリプト: `scripts/integrations/notion/discord_log_to_library.py`
+- Cron: `50 23 * * *`
+- その日の Discord ログを Notion に送る（Notion 未設定なら自動 skip）。
+
+### Notion タスク同期（任意）
+- スクリプト: `scripts/integrations/notion/sync_pending_to_notion.py`
+- Cron: `*/5 * * * *`（`NOTION_TOKEN` / `NOTION_DB_TASKS` 設定時）
+- `data/pending_tasks.json` と Notion Tasks DB を同期。
 
 ---
 
@@ -47,20 +42,14 @@
 
 `.env` で有効化し、cron の行をコメントアウトから戻す。
 
-### カレンダーリマインド（Google Calendar）
-- スクリプト: `integrations/gcal/gcal_remind.py`
-- Cron: `* * * * *`（毎分）
-- Env: `GCAL_REMIND_ENABLED=true`, `GCAL_CALENDAR_ID=...`
-- 予定の30分前に random チャンネルへ通知。
-
-### Gmail モニター
-- スクリプト: `integrations/gmail/gmail_monitor.py`
-- Cron: `* * * * *`
-- Env: `GMAIL_ENABLED=true`, `DISCORD_CHANNEL_MAIL`（通知先。未設定なら random）
-- 新着メールは webhook 経由でエージェントに渡り、`DISCORD_CHANNEL_MAIL` に reply で通知する。
-- 自動返信のフィルタ、Google Docs のサイレントアーカイブ付き。
-- 監視は `GOOGLE_TOKEN_PATH` の 1 アカウント。別アカウントは「監視アカウントへ転送」か
-  「そのアカウントの token を足してモニターを増設」で対応。
+### Google Calendar / Gmail（薄い CLI、pull 型）
+- スクリプト: `scripts/integrations/google/gcal_cli.py` / `gmail_cli.py`
+- トリガー: cron ではなく**会話駆動**。秘書が必要時に bash で叩く（予定確認・メール確認・送信）
+- Env: `GCAL_CALENDAR_ID`, `GMAIL_ALLOWLIST`（送信許可宛先）。認証は `google_auth.py`
+- 定期通知が欲しければ cron 化も可（例: 毎朝 `gcal_cli.py list` の結果を discord_send で投げる
+  ジョブを下の「サンプル」要領で作る）。セットアップは `docs/google_setup.md`。
+- ⚠️ Claude 版の常駐 Gmail モニター / 予定リマインド daemon は GPT 版には未同梱
+  （pull 型の CLI に置き換え）。daemon が要るなら同様に自作する。
 
 ### Notion 同期（Tasks）
 - スクリプト: `scripts/integrations/notion/sync_pending_to_notion.py`
@@ -74,7 +63,7 @@
 - Cron: `50 23 * * *`（コア cron セット）
 - Env: `NOTION_TOKEN`, `NOTION_DB_LOG_LIBRARY`, `DISCORD_CHANNEL_*`
 - その日の Discord ログ（24h）を Notion Log Library DB に 1 ページで投下。Notion 未設定なら skip。
-- まとめ資料も md でなく Log Library に集約する方針（AGENT/AGENTS.md「まとめ資料・ログは Notion Log Library へ」）。
+- まとめ資料も md でなく Log Library に集約する方針（AGENTS.md「まとめ資料・ログは Notion Log Library へ」）。
 
 ### Wishlist 追加（オンデマンド）
 - スクリプト: `scripts/integrations/notion/wishlist_add.py`
@@ -113,10 +102,10 @@
 ### [SAMPLE] 食事記録の自動追記
 - script: `scripts/lib/meal_log.py`（未実装・例として）
 - トリガー: cron ではなく**会話中のキーワード** — メッセージに「食事記録」が含まれたら `data/meals.md` に `YYYY-MM-DD HH:MM <本文>` を追記
-- 実装: エージェントが会話ルールとして処理するパターン（cron不要）。`AGENT/AGENTS.md` に1行足すか、本スクリプトを webhook 経由で `/log_meal` エンドポイントから叩いてもよい
+- 実装: エージェントが会話ルールとして処理するパターン（cron不要）。`AGENTS.md` に1行足すか、本スクリプトを webhook 経由で `/log_meal` エンドポイントから叩いてもよい
 - 追加時に秘書がやること:
   (1) `scripts/lib/meal_log.py` を Write（`data/meals.md` に追記する関数）
-  (2) 会話ルールを `AGENT/AGENTS.md` に追記、または `docs/webhook.md` を参照して `/log_meal` エンドポイントを追加
+  (2) 会話ルールを `AGENTS.md` に追記、または `scripts/webhook_server.py` にエンドポイント `/log_meal` を追加
 
 ### [SAMPLE] タスク件数メトリクス記録
 - script: `scripts/metrics_pending_tasks.py`（未実装・例として）

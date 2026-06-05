@@ -789,19 +789,18 @@ python3 scripts/integrations/google/gmail_cli.py list --query "is:unread" --max 
 > 使ってもいいし、右クリック → チャンネル作成で専用チャンネルを足してもいい
 > （§E でそのチャンネル ID を使う）。
 
-取ったトークンを VPS に置きます。`ここにトークンを貼る` の部分だけ書き換えて
-実行してください。
+取ったトークンは、§G で書く `~/secretary/.env` の `DISCORD_BOT_TOKEN=` に貼ります。
+GPT 版は plugin を使わないので、`discord_listener.py`（受信）と `discord_send.py`
+（送信）が `.env` から直接読みます（Claude 版のような `~/.claude/...` への配置は不要）。
+
+今すぐ控えておきたいなら一旦メモしておき、§G の `.env` 作成時にまとめて記入してOK。
+（先に入れておくなら）:
 
 ```bash
-mkdir -p ~/.claude/channels/discord
-cat > ~/.claude/channels/discord/.env <<'EOF'
-DISCORD_BOT_TOKEN=ここにトークンを貼る
-EOF
-chmod 600 ~/.claude/channels/discord/.env
+cd ~/secretary
+echo 'DISCORD_BOT_TOKEN=ここにトークンを貼る' >> .env
+chmod 600 .env
 ```
-
-> `~/secretary/.env` の方には bot トークンは書きません。上記1箇所に
-> まとめてあります。
 
 ### チャンネルとフォーラムの設計（おすすめ）
 

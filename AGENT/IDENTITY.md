@@ -93,10 +93,9 @@
 ```
 AGENT/writing/style_sample.txt
 ```
-そして `CLAUDE.md` の読み込み順に追加:
-```
-@AGENT/writing/style_sample.txt
-```
+そして `AGENTS.md` の本文に「口調サンプルは AGENT/writing/style_sample.txt を読め」
+の 1 行を足す（codex は AGENTS.md を起動時に読む。Claude 版の `@import` 構文は無い
+ので、import ではなく「読め」という指示として書く）。
 
 ### 3. 修正記録を残す
 `AGENT/writing/corrections.md` に、訂正した具体的なdiffを溜めていく。

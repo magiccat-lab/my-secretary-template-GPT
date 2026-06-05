@@ -22,7 +22,15 @@ import time
 import requests
 
 _TOKEN_CACHE: str | None = None
-_TOKEN_FILE = os.path.expanduser("~/.claude/channels/discord/.env")
+# GPT 版は .env を主に使う（~/.claude 非依存）。
+_SECRETARY_HOME = os.environ.get(
+    "SECRETARY_HOME", os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+)
+_TOKEN_FILES = [
+    os.path.join(_SECRETARY_HOME, ".env"),
+    os.path.expanduser("~/.codex/channels/discord/.env"),
+    os.path.expanduser("~/.claude/channels/discord/.env"),
+]
 
 
 def get_token() -> str:
@@ -31,21 +39,22 @@ def get_token() -> str:
     if _TOKEN_CACHE:
         return _TOKEN_CACHE
 
-    # 優先順位: 環境変数 > ~/.claude/channels/discord/.env
+    # 優先順位: 環境変数 > $SECRETARY_HOME/.env > ~/.codex > ~/.claude
     env_token = os.environ.get("DISCORD_BOT_TOKEN")
     if env_token:
         _TOKEN_CACHE = env_token
         return env_token
 
-    if os.path.exists(_TOKEN_FILE):
-        with open(_TOKEN_FILE) as f:
-            for line in f:
-                if line.startswith("DISCORD_BOT_TOKEN="):
-                    _TOKEN_CACHE = line.strip().split("=", 1)[1]
-                    return _TOKEN_CACHE
+    for path in _TOKEN_FILES:
+        if os.path.exists(path):
+            with open(path) as f:
+                for line in f:
+                    if line.startswith("DISCORD_BOT_TOKEN="):
+                        _TOKEN_CACHE = line.strip().split("=", 1)[1].strip().strip('"').strip("'")
+                        return _TOKEN_CACHE
 
     raise RuntimeError(
-        "Discord bot トークンが env や ~/.claude/channels/discord/.env に見つかりません"
+        "Discord bot トークンが env や $SECRETARY_HOME/.env に見つかりません"
     )
 
 

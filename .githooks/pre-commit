@@ -1,0 +1,9 @@
+#!/bin/bash
+# git pre-commit フック: 秘匿情報の混入チェック
+#
+# 有効化（リポジトリで 1 回だけ）:
+#   git config core.hooksPath .githooks
+#
+# commit する staged 差分に API キー/トークンが含まれていたら commit を中断する。
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+exec /usr/bin/env python3 "$REPO_ROOT/scripts/check_secrets.py"

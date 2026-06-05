@@ -17,8 +17,22 @@ logger = logging.getLogger(__name__)
 app = FastAPI()
 executor = ThreadPoolExecutor(max_workers=4)
 
+SECRETARY_HOME = os.environ.get(
+    "SECRETARY_HOME", os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+)
+# .env を環境に読み込む（GPT 版は .env が SSoT、~/.claude 非依存）
+try:
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(SECRETARY_HOME, ".env"))
+except ImportError:
+    pass
+
 QUEUE_FILE = os.environ.get('CODEX_QUEUE_FILE', '/tmp/codex_queue.txt')
-DISCORD_ENV = os.path.expanduser("~/.claude/channels/discord/.env")
+_TOKEN_FILES = [
+    os.path.join(SECRETARY_HOME, ".env"),
+    os.path.expanduser("~/.codex/channels/discord/.env"),
+    os.path.expanduser("~/.claude/channels/discord/.env"),
+]
 SCRIPTS_DIR = os.path.join(os.path.dirname(__file__))
 
 CH_RANDOM = os.getenv('DISCORD_CHANNEL_RANDOM', '')
@@ -28,12 +42,17 @@ DISCORD_USER_ID = os.getenv('DISCORD_USER_ID', '')
 
 
 def _load_discord_token() -> str:
-    with open(DISCORD_ENV) as f:
-        for line in f:
-            line = line.strip()
-            if line.startswith("DISCORD_BOT_TOKEN="):
-                return line.split("=", 1)[1]
-    raise RuntimeError("DISCORD_BOT_TOKEN not found")
+    tok = os.environ.get("DISCORD_BOT_TOKEN")
+    if tok:
+        return tok
+    for path in _TOKEN_FILES:
+        if os.path.exists(path):
+            with open(path) as f:
+                for line in f:
+                    line = line.strip()
+                    if line.startswith("DISCORD_BOT_TOKEN="):
+                        return line.split("=", 1)[1].strip().strip('"').strip("'")
+    raise RuntimeError("DISCORD_BOT_TOKEN not found (env / $SECRETARY_HOME/.env)")
 
 
 def discord_send(channel_id: str, message: str) -> bool:
