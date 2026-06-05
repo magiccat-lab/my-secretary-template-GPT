@@ -22,10 +22,13 @@ Discord を窓口に、あなた専属の秘書エージェントが 24 時間�
 ## アーキテクチャ
 
 ```
-Discord / cron
-      │  (HTTP)
-      ▼
-webhook_server.py ──► /tmp/codex_queue.txt (base64 行追記)
+Discord メッセージ            cron / HTTP イベント
+      │                            │
+      ▼                            ▼
+discord_listener.py          webhook_server.py
+ (Gateway 受信/allowlist)      (HTTP 受信)
+      │                            │
+      └────────► /tmp/codex_queue.txt (base64 行追記) ◄────┘
                               │
                               ▼
                   codex_queue_worker.py        ← 中核
@@ -65,7 +68,7 @@ codex 公式の自動化インターフェースで、stdin・JSONL イベント
 ## ディレクトリ構成
 
 ```
-start_server.sh              起動 (screen に worker + webhook を立てる)
+start_server.sh              起動 (screen に worker + webhook + listener を立てる)
 config.codex.toml.template   ~/.codex/config.toml の雛形 (承認policy + 数学MCP)
 AGENTS.md                    codex が読む唯一の指示書 (人格・返信方法・安全ルール)
 AGENT/
@@ -74,10 +77,12 @@ AGENT/
   JOBS.md                    インフラ・運用メモ
 scripts/
   codex_queue_worker.py      中核: queue → codex exec → resume 継続 + heartbeat
-  webhook_server.py          受信 (Discord/cron → queue)
+  discord_listener.py        Discord 受信 (Gateway 接続 → allowlist ch → queue)
+  webhook_server.py          受信 (cron/HTTP → queue)
   discord_send.py            送信 (token 解決は env / .env / ~/.codex の順、~/.claude 非依存)
   session_watchdog.py        heartbeat ベースの固着検知・自動復帰
   lib/discord_post.py        送信ヘルパー
+  integrations/google/       Calendar / Gmail の薄い OAuth CLI
   integrations/notion/       Notion 連携
 data/
   handoff.md                 直近の引き継ぎ文脈
@@ -90,8 +95,8 @@ data/
 
 ```bash
 npm i -g @openai/codex && codex login        # 1. 脳 (ChatGPT 課金アカウント、API課金不要)
-git clone https://github.com/magiccat-lab/my-secretary-template-GPT ~/secretary-gpt
-cd ~/secretary-gpt && pip install -r requirements.txt
+git clone https://github.com/magiccat-lab/my-secretary-template-GPT ~/secretary
+cd ~/secretary && pip install -r requirements.txt
 cp config.codex.toml.template ~/.codex/config.toml   # 2. 承認policy + MCP を編集
 cp .env.template .env                                 # 3. DISCORD_BOT_TOKEN を記入
 # 4. AGENT/IDENTITY.md と AGENT/USER.md に人格・ユーザー情報を記入
