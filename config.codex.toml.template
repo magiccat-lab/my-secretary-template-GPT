@@ -1,0 +1,57 @@
+# config.codex.toml.template — ~/.codex/config.toml に配置するテンプレ
+#
+# SETUP 手順:
+#   1. cp config.codex.toml.template ~/.codex/config.toml
+#   2. MCP サーバーの command / args を自分の環境のパスに合わせて修正
+#   3. 不要な MCP セクションは削る
+#
+# 注意 (codex レビュー反映):
+#   - required = true にすると、その MCP の起動失敗で codex 自体が落ちる。
+#     基本 false にして、本体機能 (Discord/Notion) は MCP 無しでも動くようにする。
+#   - stdio MCP はシェル profile の env を継承しない。必要な環境変数は各セクションの
+#     [mcp_servers.X.env] で明示的に渡す。
+#   - GeoGebra など GUI 依存サーバーは DISPLAY / ヘッドレス設定が別途必要。
+
+# ============================================================
+# 無人運用の承認 / sandbox (Claude Code の --dangerously-skip-permissions 相当)
+# ============================================================
+# approval_policy = "never"  … 承認モーダルを出さない (無人運用前提)
+# sandbox_mode               … workspace-write: cwd 配下は書込可、外は読取のみ
+approval_policy = "never"
+sandbox_mode = "workspace-write"
+
+[sandbox_workspace_write]
+# Discord/Notion 送信にはネット必須。送信スクリプトを codex 内から叩くなら true。
+# よりセキュアにするなら送信をワーカー外側に出し、ここは false にする。
+network_access = true
+
+# ============================================================
+# 数学者向け MCP (Lean / GeoGebra / TeX)
+# ============================================================
+
+# --- Lean 4 定理証明 (lean-lsp-mcp) ---
+[mcp_servers.lean]
+command = "uvx"
+args = ["lean-lsp-mcp"]
+startup_timeout_sec = 30
+tool_timeout_sec = 180
+required = false
+# env = { LEAN_PROJECT_PATH = "/home/USER/lean-project" }
+
+# --- GeoGebra 作図 / CAS (@gebrai/gebrai) ---
+[mcp_servers.geogebra]
+command = "npx"
+args = ["-y", "@gebrai/gebrai"]
+startup_timeout_sec = 30
+tool_timeout_sec = 120
+required = false
+# GUI 依存。ヘッドレス環境では DISPLAY 設定や xvfb が要る場合あり。
+
+# --- LaTeX / TeX 組版 (mcp-latex-server) ---
+[mcp_servers.latex]
+command = "node"
+args = ["/path/to/mcp-latex-server/dist/index.js"]
+startup_timeout_sec = 20
+tool_timeout_sec = 120
+required = false
+# 要 TeX 配布 (TeX Live / MiKTeX)。pdflatex/xelatex/lualatex のパスを通しておく。
