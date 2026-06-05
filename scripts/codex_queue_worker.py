@@ -43,6 +43,14 @@ EXTRA_FLAGS = os.environ.get("CODEX_EXEC_FLAGS", "").split()
 POLL_SECONDS = float(os.environ.get("CODEX_QUEUE_POLL", "2"))
 TURN_TIMEOUT = int(os.environ.get("CODEX_TURN_TIMEOUT", "1800"))  # 30 分/ターン上限
 
+# 脳の切替レバー [非常用]。通常は codex (GPT)。codex が使えない緊急時のみ claude に。
+#   BRAIN=codex (既定) | claude
+# claude パスは degraded: identity hook / 口調強制は無く、AGENTS.md を素の指示として渡すだけ。
+# 二脳を常時保守しないための「作らずに済むフォールバック」の最小実装。
+BRAIN = os.environ.get("BRAIN", "codex").lower()
+CLAUDE_BIN = os.environ.get("CLAUDE_BIN", "claude")
+CLAUDE_FLAGS = os.environ.get("CLAUDE_FLAGS", "--dangerously-skip-permissions").split()
+
 
 def log(msg: str) -> None:
     print(f"[{datetime.now(JST):%Y-%m-%d %H:%M:%S}] {msg}", flush=True)
@@ -73,16 +81,24 @@ def save_session_id(sid: str) -> None:
 
 
 def build_command(prompt: str, session_id: str | None) -> list[str]:
-    """codex exec コマンドを組む。既存 session があれば resume で継続。
+    """脳のコマンドを組む。BRAIN で codex / claude を切替。既存 session は継続。
 
-    実機検証 (codex 0.137.0, 2026-06-05) で確定した仕様:
+    codex 実機検証 (0.137.0, 2026-06-05) で確定した仕様:
       - session 識別子は thread.started イベントの `thread_id` (UUID)。
       - `exec resume` サブコマンドは `-s/--sandbox` を受け付けない (exec 専用)。
         sandbox/approval は config.toml か `-c key=value` 上書きで渡す。
       - フラグは positional (SESSION_ID/PROMPT) より前に置く。
     """
+    if BRAIN == "claude":
+        # 非常用フォールバック。claude -p の stream-json (JSONL) で session_id を拾い継続。
+        # stream-json は session_id を含む JSONL を吐くので既存の行パーサで処理できる。
+        cmd = [CLAUDE_BIN, "-p", "--output-format", "stream-json", "--verbose", *CLAUDE_FLAGS]
+        if session_id:
+            cmd += ["--resume", session_id]
+        cmd.append(prompt)
+        return cmd
+    # 通常: codex
     if session_id:
-        # resume: 直前ターンの会話文脈を引き継ぐ。flags → SESSION_ID → PROMPT の順。
         return [CODEX_BIN, "exec", "resume", "--json", "--skip-git-repo-check",
                 *EXTRA_FLAGS, session_id, prompt]
     return [CODEX_BIN, "exec", "--json", "--skip-git-repo-check", *EXTRA_FLAGS, prompt]
@@ -159,7 +175,7 @@ def run_turn(prompt: str) -> None:
 def main() -> int:
     QUEUE_FILE.touch(exist_ok=True)
     PROCESSED_FILE.touch(exist_ok=True)
-    log(f"codex_queue_worker 起動: {QUEUE_FILE} を監視 (SECRETARY_HOME={SECRETARY_HOME})")
+    log(f"codex_queue_worker 起動: BRAIN={BRAIN} / {QUEUE_FILE} を監視 (SECRETARY_HOME={SECRETARY_HOME})")
     write_state(status="idle")
 
     while True:
