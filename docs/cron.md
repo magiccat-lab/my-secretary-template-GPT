@@ -6,11 +6,17 @@ Asia/Tokyo` 済）。スクリプトは**フルパス**で呼ぶ（`python3` で
 ## コア cron
 
 ```cron
-# 脳(worker)の死活・固着を heartbeat で監視して自動復帰（2分おき）
+# 脳(worker)の固着を heartbeat で監視して自動復帰（2分おき）
 */2 * * * * SECRETARY_HOME=$HOME/secretary WATCHDOG_NOTIFY_CHANNEL=YOUR_CH_ID /usr/bin/python3 $HOME/secretary/scripts/session_watchdog.py >> /tmp/session_watchdog.log 2>&1
 
-# 毎日 04:00 に codex セッションをリセットして fresh 再起動（exec resume の文脈肥大対策）
-0 4 * * * SECRETARY_HOME=$HOME/secretary /bin/bash -c 'rm -f /tmp/codex_secretary_session.txt && bash $HOME/secretary/start_server.sh' >> /tmp/restart.log 2>&1
+# プロセス/サーバが落ちたら start_server で復旧（5分おき）
+*/5 * * * * SECRETARY_HOME=$HOME/secretary WATCHDOG_NOTIFY_CHANNEL=YOUR_CH_ID /bin/bash $HOME/secretary/scripts/health_check.sh >> /tmp/health_check.log 2>&1
+
+# 未完了タスクを Discord にリマインド（1日2回）
+30 6,22 * * * SECRETARY_HOME=$HOME/secretary /usr/bin/python3 $HOME/secretary/scripts/task_remind.py >> /tmp/task_remind.log 2>&1
+
+# 毎日 04:00: handoff を書いてからセッションリセット + 再起動（文脈は handoff で継続）
+0 4 * * * SECRETARY_HOME=$HOME/secretary /bin/bash $HOME/secretary/scripts/nightly_restart.sh >> /tmp/nightly_restart.log 2>&1
 
 # その日の Discord ログを Notion Log Library に送る（Notion 未設定なら自動 skip）
 50 23 * * * SECRETARY_HOME=$HOME/secretary /usr/bin/python3 $HOME/secretary/scripts/integrations/notion/discord_log_to_library.py >> /tmp/discord_log_to_library.log 2>&1

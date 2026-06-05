@@ -12,19 +12,25 @@
 
 ## コアジョブ（テンプレートに同梱）
 
-### 死活・固着 watchdog（必須）
-- スクリプト: `scripts/session_watchdog.py`
-- Cron: `*/2 * * * *`（2 分おき）
-- 脳(worker)が書く heartbeat（`data/codex_worker_state.json`）の鮮度を見て、
-  落ちた / 固まった（`status=running` のまま長時間 / 未処理 backlog があるのに無更新）
-  を検出し `start_server.sh` で自動再起動。`WATCHDOG_NOTIFY_CHANNEL` に通知先 ch_id。
-- Claude 版のような screen hardcopy 監視ではなく heartbeat ベース（TUI 非依存で堅い）。
+### 固着 watchdog（必須）
+- スクリプト: `scripts/session_watchdog.py` / Cron: `*/2 * * * *`
+- 脳(worker)の heartbeat（`data/codex_worker_state.json`）の鮮度を見て、固まった
+  （running のまま長時間 / backlog あるのに無更新）を検出し再起動。heartbeat ベース。
 
-### 定期セッションリセット（推奨）
-- Cron: `0 4 * * *`（毎日 04:00。週1なら `10 4 * * 0`）
-- `/tmp/codex_secretary_session.txt` を消して `start_server.sh` で fresh 起動。
-  `codex exec resume` の文脈肥大を防ぐ。codex は job 駆動なので Claude 版ほど常駐
-  コンテキストは溜まらず、無くても可。
+### 死活監視（必須）
+- スクリプト: `scripts/health_check.sh` / Cron: `*/5 * * * *`
+- webhook / screen / worker / listener が落ちていたら `start_server.sh` で復旧。
+  watchdog（固着）と相補。`WATCHDOG_NOTIFY_CHANNEL` に通知先 ch_id。
+
+### タスクリマインダー
+- スクリプト: `scripts/task_remind.py` / Cron: `30 6,22 * * *`
+- `data/pending_tasks.json` の未完了を `DISCORD_CHANNEL_RANDOM` に投稿。
+
+### nightly 再起動（handoff 付き・必須）
+- スクリプト: `scripts/nightly_restart.sh` / Cron: `0 4 * * *`
+- 現セッションに引き継ぎ要約を書かせて `data/handoff.md` に保存 → セッション
+  リセット → `start_server.sh`。起動時に handoff を読むので**文脈が継続**する。
+  `exec resume` の肥大も断つ。Claude 版の daily_handoff + restart 相当。
 
 ### Discord ログ → Notion Log Library
 - スクリプト: `scripts/integrations/notion/discord_log_to_library.py`

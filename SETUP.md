@@ -1230,21 +1230,31 @@ echo 'DISCORD_ALLOWED_CHANNELS=123456789012345678,234567890123456789' >> ~/secre
 
 安定運用のための cron。通常シェル（screen の外）でまるごとコピペ:
 
+`YOUR_CH_ID` を通知先 channel_id に置換してから、通常シェル（screen の外）でまるごとコピペ:
+
 ```bash
 (crontab -l 2>/dev/null; cat <<EOF
 */2 * * * * SECRETARY_HOME=$HOME/secretary WATCHDOG_NOTIFY_CHANNEL=YOUR_CH_ID /usr/bin/python3 $HOME/secretary/scripts/session_watchdog.py >> /tmp/session_watchdog.log 2>&1
-0 4 * * * SECRETARY_HOME=$HOME/secretary /bin/bash -c 'rm -f /tmp/codex_secretary_session.txt && bash $HOME/secretary/start_server.sh' >> /tmp/restart.log 2>&1
+*/5 * * * * SECRETARY_HOME=$HOME/secretary WATCHDOG_NOTIFY_CHANNEL=YOUR_CH_ID /bin/bash $HOME/secretary/scripts/health_check.sh >> /tmp/health_check.log 2>&1
+30 6,22 * * * SECRETARY_HOME=$HOME/secretary /usr/bin/python3 $HOME/secretary/scripts/task_remind.py >> /tmp/task_remind.log 2>&1
+0 4 * * * SECRETARY_HOME=$HOME/secretary /bin/bash $HOME/secretary/scripts/nightly_restart.sh >> /tmp/nightly_restart.log 2>&1
 50 23 * * * SECRETARY_HOME=$HOME/secretary /usr/bin/python3 $HOME/secretary/scripts/integrations/notion/discord_log_to_library.py >> /tmp/discord_log_to_library.log 2>&1
 EOF
 ) | crontab -
 ```
 
-- `session_watchdog.py`（2 分おき）… worker が**落ちた / 固まった**ら heartbeat の
-  鮮度で検知して自動再起動（`WATCHDOG_NOTIFY_CHANNEL` を自分の ch_id に置換）
-- 毎日 04:00 のリスタート … codex セッション (`/tmp/codex_secretary_session.txt`) を
-  リセットして fresh に再起動。`exec resume` の文脈肥大を防ぐ nightly リフレッシュ
-- `discord_log_to_library.py`（毎日 23:50）… その日の Discord ログを Notion Log Library
-  に送る（Notion 未設定なら自動 skip）
+- `session_watchdog.py`（2 分）… 脳(worker)が**固まった**ら heartbeat の鮮度で検知して再起動
+- `health_check.sh`（5 分）… webhook / screen / worker / listener が**落ちた**ら start_server で復旧
+- `task_remind.py`（06:30 / 22:30）… 未完了タスクを Discord にリマインド
+- `nightly_restart.sh`（毎日 04:00）… **handoff を data/handoff.md に書いてから** セッション
+  リセット + 再起動。起動時に handoff を読むので文脈が継続する（exec resume の肥大も断つ）
+- `discord_log_to_library.py`（23:50）… その日の Discord ログを Notion Log Library へ（未設定なら skip）
+
+機能別 cron（任意。`.env` 設定後に足す）:
+```bash
+# Notion タスク同期（5分おき）
+*/5 * * * * SECRETARY_HOME=$HOME/secretary /usr/bin/python3 $HOME/secretary/scripts/integrations/notion/sync_pending_to_notion.py >> /tmp/notion_sync.log 2>&1
+```
 
 登録できたか確認:
 
@@ -1252,9 +1262,7 @@ EOF
 crontab -l
 ```
 
-> nightly リスタートが不要なら `0 4 * * *` の行を削ってよい（codex は job 駆動なので
-> Claude 版ほど常駐コンテキストが溜まらない）。Gmail / カレンダー同期など機能別 cron は
-> 各機能を有効化するときに足す。
+> nightly_restart が不要なら `0 4 * * *` の行を削ってよい。`task_remind` の頻度も好みで調整。
 
 ---
 

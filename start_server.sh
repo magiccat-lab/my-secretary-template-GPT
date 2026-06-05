@@ -45,3 +45,8 @@ echo "  - window 0: codex_queue_worker (脳)"
 echo "  - window 1: webhook_server (cron/HTTP 受信)"
 echo "  - window 2: discord_listener (Discord 受信)"
 screen -list | grep secretary-gpt
+
+# 起動後の自己診断 (ダウン時間検出 + コンポーネント確認)。失敗しても起動自体は妨げない。
+if [ -f "$SECRETARY_DIR/scripts/startup_check.sh" ]; then
+  ( sleep 8; SECRETARY_HOME=$SECRETARY_DIR bash "$SECRETARY_DIR/scripts/startup_check.sh" ) >/dev/null 2>&1 &
+fi
