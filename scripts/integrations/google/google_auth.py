@@ -59,8 +59,15 @@ def get_credentials():
         )
     from google_auth_oauthlib.flow import InstalledAppFlow
 
+    # ヘッドレス VPS 対応: ブラウザは自動起動しない (VPS にブラウザは無い) し、
+    # ポートを固定して SSH ポートフォワードでトンネルできるようにする。
+    # 手順: 手元 Mac から `ssh -L <PORT>:localhost:<PORT> ...` で入り直してから本スクリプトを実行、
+    #       表示された URL を Mac ブラウザで開く → redirect の localhost:<PORT> がトンネル経由で届く。
+    port = int(os.environ.get("GOOGLE_OAUTH_PORT", "8765"))
     flow = InstalledAppFlow.from_client_secrets_file(str(CREDENTIALS_PATH), SCOPES)
-    creds = flow.run_local_server(port=0)
+    print(f"[google_auth] ブラウザは自動で開かない。下に出る URL を手元の Mac ブラウザで開け")
+    print(f"[google_auth] 事前に  ssh -L {port}:localhost:{port} ...  でトンネルを張っておくこと")
+    creds = flow.run_local_server(host="localhost", port=port, open_browser=False)
     _save(creds)
     return creds
 
