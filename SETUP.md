@@ -25,7 +25,7 @@
 
 **フェーズ 2. 外部サービスと繋ぐ**
 
-- `C3.` Google API 連携（Calendar / Gmail / Sheets / Drive / Docs / Forms）
+- `C3.` Google API 連携（Calendar / Gmail。薄い CLI 経由）
 - `D.` Discord で bot を作ってトークンを取る
 - `E.` 必要な Discord の ID を 3 つ取る
 - `F.` Webhook トークンを生成
