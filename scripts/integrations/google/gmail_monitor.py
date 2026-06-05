@@ -28,7 +28,8 @@ import requests
 
 # `from scripts.lib.state_store import ...` を動かすためリポジトリルートを sys.path に追加。
 # __file__ -> integrations/gmail/gmail_monitor.py なので dirname を3回でルートに到達。
-_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
+# このファイルは scripts/integrations/google/ 配下なので repo root は 4 階層上
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))))
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 

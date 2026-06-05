@@ -23,7 +23,8 @@ import sys
 import requests
 from dotenv import load_dotenv
 
-_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
+# このファイルは scripts/integrations/google/ 配下なので repo root は 4 階層上
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))))
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
