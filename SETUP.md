@@ -456,7 +456,10 @@ cp config.codex.toml.template ~/.codex/config.toml   # ※ リポジトリを cl
 - **Lean 4**: `elan` で Lean を入れ、`uvx lean-lsp-mcp`。mathlib を本格利用するなら
   RAM 8GB+ 推奨（VPS は 12GB プラン以上が安全）。
 - **GeoGebra**: `npx -y @gebrai/gebrai`（Java + ヘッドレス表示が要る場合は `xvfb`）。
-- **TeX**: `sudo apt install -y texlive-full`（ディスク ~7GB）+ mcp-latex-server。
+- **TeX**: `sudo apt install -y texlive-full`（ディスク ~7GB）。MCP は Python 製の
+  mcp-latex-server を `git clone .../RobertoDure/mcp-latex-server && cd mcp-latex-server
+  && uv venv && uv pip install -e .` で入れ、config.toml の latex を clone 先 venv の
+  python に向ける（テンプレ参照）。
 
 接続確認:
 

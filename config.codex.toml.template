@@ -47,10 +47,13 @@ tool_timeout_sec = 120
 required = false
 # GUI 依存。ヘッドレス環境では DISPLAY 設定や xvfb が要る場合あり。
 
-# --- LaTeX / TeX 組版 (mcp-latex-server) ---
+# --- LaTeX / TeX 組版 (mcp-latex-server: Python/FastMCP) ---
+# 入手: git clone https://github.com/RobertoDure/mcp-latex-server && cd mcp-latex-server
+#       && uv venv && uv pip install -e .
+# 下の python は clone 先の venv のものを絶対パスで指す (PATH 非依存で確実)。
 [mcp_servers.latex]
-command = "node"
-args = ["/path/to/mcp-latex-server/dist/index.js"]
+command = "/root/mcp-latex-server/.venv/bin/python"
+args = ["/root/mcp-latex-server/latex_server.py"]
 startup_timeout_sec = 20
 tool_timeout_sec = 120
 required = false
