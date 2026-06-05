@@ -884,36 +884,46 @@ python3 -c "import secrets; print(secrets.token_hex(32))"
 
 ここまでで手元にある情報はこれ:
 
+- `DISCORD_BOT_TOKEN`（§D で作った秘書用 bot のトークン）
 - `DISCORD_USER_ID`（数字）
-- `DISCORD_CHANNEL_RANDOM`（数字）
-- `DISCORD_CHANNEL_MAIL`（数字）
-- `WEBHOOK_TOKEN`（16進文字列）
+- 受信させる channel_id（§E。random/mail/log + フォーラム等）
+- `WEBHOOK_TOKEN`（16進文字列。`python3 -c "import secrets; print(secrets.token_hex(32))"` で生成）
 
 トークン類を外部に送りたくないので、これは VPS のターミナルだけで完結させます。
-下のコマンドの **`paste_*_here` の4箇所だけ書き換えて**、まるごとコピペして実行
-してください。
+下の `paste_*_here` を実際の値に書き換えて、まるごとコピペして実行してください。
 
 ```bash
 cat <<'EOF' > ~/secretary/.env
+# 脳
+BRAIN=codex
+
+# Discord
+DISCORD_BOT_TOKEN=paste_bot_token_here
 DISCORD_USER_ID=paste_user_id_here
-DISCORD_CHANNEL_RANDOM=paste_channel_id_here
-DISCORD_CHANNEL_MAIL=paste_mail_channel_id_here
+# 秘書が受信する ch（カンマ区切り。フォーラムは ID を入れれば中のスレッドも拾う）
+DISCORD_ALLOWED_CHANNELS=paste_ch_ids_comma_separated
+DISCORD_CHANNEL_RANDOM=paste_random_id
+DISCORD_CHANNEL_MAIL=paste_mail_id
+
+# Webhook
 WEBHOOK_PORT=8781
 WEBHOOK_TOKEN=paste_webhook_token_here
-GOOGLE_TOKEN_PATH=integrations/google/token.json
+
+# Google（token は ~/.codex/secrets に隔離済なのでパス指定不要）
 GCAL_CALENDAR_ID=primary
-TASK_SHEET_ID=
-GMAIL_ENABLED=false
-GCAL_REMIND_ENABLED=false
-BRAVE_API_KEY=
+GMAIL_ALLOWLIST=
+
+# Notion（任意。使うなら埋める）
+NOTION_TOKEN=
+NOTION_DB_TASKS=
+NOTION_DB_WISHLIST=
+NOTION_DB_LOG_LIBRARY=
 EOF
 chmod 600 ~/secretary/.env
 ```
 
-実行したら完了です。
-
-> Google カレンダーや Gmail、Sheets、Brave 検索はいまは空欄でOKです。後で
-> 秘書本人に頼めばセットアップしてくれます（その時に値が追加されます）。
+> `DISCORD_ALLOWED_CHANNELS` に入れた ch だけ秘書が受信します（未設定だと全無視）。
+> Google / Notion は空欄でも起動します。後で秘書本人に頼めば値を追加できます。
 
 ---
 

@@ -96,7 +96,11 @@ def main() -> int:
         # 自分 / 他 bot は無視 (ループ防止)
         if message.author.bot or (client.user and message.author.id == client.user.id):
             return
-        if allowed and message.channel.id not in allowed:
+        # ch 判定: 直接の channel_id か、フォーラム/スレッドの親 (parent_id) が allowlist にあれば通す
+        ch = message.channel
+        ch_id = getattr(ch, "id", None)
+        parent_id = getattr(ch, "parent_id", None)
+        if allowed and ch_id not in allowed and parent_id not in allowed:
             return
         content = message.content or ""
         if not content.strip():
