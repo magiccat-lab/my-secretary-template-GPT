@@ -117,13 +117,20 @@ def find_existing_page_id(source_key: str) -> str | None:
 def create_page(props: dict) -> bool:
     body = {"parent": {"database_id": DB_ID}, "properties": props}
     r = _request_with_retry("POST", f"{NOTION_API}/pages", headers=_headers(), json=body)
-    return r.status_code in (200, 201)
+    if r.status_code not in (200, 201):
+        # 失敗を握り潰さず理由を出す (プロパティ名/型の不一致を即特定できるように)
+        print(f"  ↳ create 失敗 HTTP {r.status_code}: {r.text[:400]}", file=sys.stderr)
+        return False
+    return True
 
 
 def update_page(page_id: str, props: dict) -> bool:
     body = {"properties": props}
     r = _request_with_retry("PATCH", f"{NOTION_API}/pages/{page_id}", headers=_headers(), json=body)
-    return r.status_code == 200
+    if r.status_code != 200:
+        print(f"  ↳ update 失敗 HTTP {r.status_code}: {r.text[:400]}", file=sys.stderr)
+        return False
+    return True
 
 
 def main() -> int:
