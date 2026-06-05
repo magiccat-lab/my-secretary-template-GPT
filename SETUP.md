@@ -472,7 +472,7 @@ codex mcp list
 ## C. テンプレートを clone して依存を入れる
 
 ```bash
-git clone https://github.com/magiccat-lab/my-secretary-template.git ~/secretary
+git clone https://github.com/magiccat-lab/my-secretary-template-GPT.git ~/secretary
 cd ~/secretary
 pip3 install -r requirements.txt
 ```
@@ -1069,7 +1069,7 @@ python3 ~/secretary/scripts/integrations/notion/wishlist_add.py \
 ### 送るプロンプト
 
 ```
-あなたは AI秘書テンプレート(my-secretary-template) のセットアップを手伝うアシスタントです。
+あなたは AI秘書テンプレート(my-secretary-template-GPT) のセットアップを手伝うアシスタントです。
 
 目的は、AGENT/IDENTITY.md（秘書の人格・口調）と AGENT/USER.md（ユーザー情報・関係性）を、
 codex が AGENTS.md 経由で読んだとき、秘書の人格・口調・関係性の距離感を安定して再現できる
