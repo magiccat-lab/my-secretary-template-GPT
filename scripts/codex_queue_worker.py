@@ -99,9 +99,29 @@ def build_command(prompt: str, session_id: str | None) -> list[str]:
         return cmd
     # 通常: codex
     if session_id:
+        # resume は -s/--sandbox を受け付けない (rc=2 で即死)。EXTRA_FLAGS から除去して footgun を防ぐ。
+        # sandbox は ~/.codex/config.toml の sandbox_mode か -c override で渡すこと。
+        safe_flags = _strip_sandbox_flags(EXTRA_FLAGS)
         return [CODEX_BIN, "exec", "resume", "--json", "--skip-git-repo-check",
-                *EXTRA_FLAGS, session_id, prompt]
+                *safe_flags, session_id, prompt]
     return [CODEX_BIN, "exec", "--json", "--skip-git-repo-check", *EXTRA_FLAGS, prompt]
+
+
+def _strip_sandbox_flags(flags: list[str]) -> list[str]:
+    """`exec resume` が受け付けない -s/--sandbox とその値を除去する。"""
+    out: list[str] = []
+    skip_next = False
+    for f in flags:
+        if skip_next:
+            skip_next = False
+            continue
+        if f in ("-s", "--sandbox"):
+            skip_next = True  # 直後の値も飛ばす
+            continue
+        if f.startswith("--sandbox="):
+            continue
+        out.append(f)
+    return out
 
 
 def run_turn(prompt: str) -> None:
@@ -126,6 +146,7 @@ def run_turn(prompt: str) -> None:
 
     new_session: str | None = None
     last_err: str | None = None
+    nonjson_tail: list[str] = []  # 非JSON出力 (codex のエラーメッセージ等) を保持して失敗時に出す
     start = time.monotonic()
     assert proc.stdout is not None
     for line in proc.stdout:
@@ -140,6 +161,10 @@ def run_turn(prompt: str) -> None:
         try:
             ev = json.loads(line)
         except json.JSONDecodeError:
+            # JSON でない行 = codex の human-readable なエラー/警告。末尾数行を保持。
+            nonjson_tail.append(line[:300])
+            if len(nonjson_tail) > 8:
+                nonjson_tail.pop(0)
             continue
         sid = ev.get("thread_id") or ev.get("session_id") or (ev.get("session") or {}).get("id")
         if sid:
@@ -167,9 +192,12 @@ def run_turn(prompt: str) -> None:
         log("codex exec 正常終了")
         write_state(status="idle", last_session_id=new_session or session_id)
     else:
-        log(f"codex exec 異常終了 rc={rc} err={last_err}")
-        write_state(status="error", error=last_err or f"rc={rc}",
-                    last_session_id=new_session or session_id)
+        # 失敗時は codex の非JSON出力 (エラー本文) も残す。rc=2 の原因特定に効く。
+        detail = last_err or (" / ".join(nonjson_tail[-4:]) if nonjson_tail else f"rc={rc}")
+        log(f"codex exec 異常終了 rc={rc} err={detail}")
+        if nonjson_tail:
+            log(f"  codex出力(末尾): {' | '.join(nonjson_tail[-4:])}")
+        write_state(status="error", error=detail, last_session_id=new_session or session_id)
 
 
 def main() -> int:
