@@ -99,26 +99,30 @@ def build_command(prompt: str, session_id: str | None) -> list[str]:
         return cmd
     # 通常: codex
     if session_id:
-        # resume は -s/--sandbox を受け付けない (rc=2 で即死)。EXTRA_FLAGS から除去して footgun を防ぐ。
-        # sandbox は ~/.codex/config.toml の sandbox_mode か -c override で渡すこと。
-        safe_flags = _strip_sandbox_flags(EXTRA_FLAGS)
+        # resume は exec 専用フラグ (-s/--sandbox, --add-dir, -C/--cd) を受け付けない (rc=2 で即死)。
+        # EXTRA_FLAGS から除去して footgun を防ぐ。sandbox/作業dir は config.toml で設定すること。
+        safe_flags = _strip_resume_incompatible(EXTRA_FLAGS)
         return [CODEX_BIN, "exec", "resume", "--json", "--skip-git-repo-check",
                 *safe_flags, session_id, prompt]
     return [CODEX_BIN, "exec", "--json", "--skip-git-repo-check", *EXTRA_FLAGS, prompt]
 
 
-def _strip_sandbox_flags(flags: list[str]) -> list[str]:
-    """`exec resume` が受け付けない -s/--sandbox とその値を除去する。"""
+# `codex exec resume` が受け付けない exec 専用フラグ (値を取るもの)
+_RESUME_INCOMPATIBLE = {"-s", "--sandbox", "--add-dir", "-C", "--cd"}
+
+
+def _strip_resume_incompatible(flags: list[str]) -> list[str]:
+    """resume サブコマンドが拒否する exec 専用フラグとその値を除去する。"""
     out: list[str] = []
     skip_next = False
     for f in flags:
         if skip_next:
             skip_next = False
             continue
-        if f in ("-s", "--sandbox"):
-            skip_next = True  # 直後の値も飛ばす
-            continue
-        if f.startswith("--sandbox="):
+        base = f.split("=", 1)[0]
+        if base in _RESUME_INCOMPATIBLE:
+            if "=" not in f:
+                skip_next = True  # 直後の値も飛ばす
             continue
         out.append(f)
     return out
