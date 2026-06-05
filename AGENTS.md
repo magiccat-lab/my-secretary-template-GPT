@@ -46,6 +46,22 @@ python3 scripts/discord_send.py <CHANNEL_ID> "本文"
   で接続済み。証明検証・作図・数式組版はこれらを使う。
 - MCP が落ちていても本体機能 (Discord/Notion/cron) は動くべき。required=true にしない。
 
+### Google 操作 (Calendar / Gmail)
+
+claude.ai のホスト Google コネクタは無い。代わりに薄い CLI を bash で叩く:
+
+```bash
+# 予定を見る / 作る (create は --yes で実行、無ければ dry-run)
+python3 scripts/integrations/google/gcal_cli.py list --days 7
+python3 scripts/integrations/google/gcal_cli.py create --summary "..." --start ... --end ... --yes
+# メールを見る / 送る (send は GMAIL_ALLOWLIST 内の宛先のみ + --yes 必須)
+python3 scripts/integrations/google/gmail_cli.py list --query "is:unread"
+python3 scripts/integrations/google/gmail_cli.py send --to a@b.com --subject "..." --body "..." --yes
+```
+
+- メール送信・予定変更など外部に影響する操作は、必ず先にユーザーへ内容を見せて確認を取る。
+- token は触らない (CLI が `~/.codex/secrets/` から読む)。セットアップは docs/google_setup.md。
+
 ## セッション開始時の手順
 
 1. `AGENT/IDENTITY.md` と `AGENT/USER.md` を読んで人格・関係性を確認。
